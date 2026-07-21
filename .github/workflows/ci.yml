@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - run: supabase start
+
+      - name: Export Supabase credentials
+        run: |
+          echo "SUPABASE_DB_URL=postgresql://postgres:postgres@127.0.0.1:54422/postgres" >> .env.test
+          echo "SUPABASE_URL=$(supabase status -o env | grep '^API_URL=' | cut -d= -f2- | tr -d '\"')" >> .env.test
+          echo "SUPABASE_SERVICE_ROLE_KEY=$(supabase status -o env | grep '^SERVICE_ROLE_KEY=' | cut -d= -f2- | tr -d '\"')" >> .env.test
+          echo "NEXT_PUBLIC_SUPABASE_URL=$(supabase status -o env | grep '^API_URL=' | cut -d= -f2- | tr -d '\"')" >> .env.local
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(supabase status -o env | grep '^ANON_KEY=' | cut -d= -f2- | tr -d '\"')" >> .env.local
+
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test:unit
+
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e

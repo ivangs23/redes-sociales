@@ -27,6 +27,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.5",
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
