@@ -58,10 +58,19 @@ describe("RLS isolation", () => {
     expect(rows).toBe(0);
   });
 
+  // authenticated holds no INSERT/UPDATE/DELETE grant on public.orgs or
+  // public.memberships (see
+  // supabase/migrations/20260721000500_explicit_table_grants.sql): every
+  // write attempt below is rejected by the grant check itself, before RLS
+  // is ever consulted. That is a stronger guarantee than an RLS denial —
+  // there is no policy to misconfigure, because the ACL has no matching
+  // entry at all. Writes go exclusively through the SECURITY DEFINER
+  // functions (create_org_for_current_user, ensure_org_for_current_user).
+
   it("refuses a direct insert into orgs", async () => {
     await expect(
       asUser(userB, (sql) => sql.query("insert into public.orgs (name) values ('Sneaky')")),
-    ).rejects.toThrow(/row-level security/);
+    ).rejects.toThrow(/permission denied for table orgs/);
   });
 
   it("refuses a direct insert into memberships", async () => {
@@ -72,22 +81,26 @@ describe("RLS isolation", () => {
           [orgA, userB],
         ),
       ),
-    ).rejects.toThrow(/row-level security/);
+    ).rejects.toThrow(/permission denied for table memberships/);
   });
 
   it("refuses to delete another org", async () => {
-    await asUser(userB, async (sql) => {
-      const result = await sql.query("delete from public.orgs where id = $1", [orgA]);
-      expect(result.rowCount).toBe(0);
-    });
+    // Not scoped to "another org": authenticated has no DELETE grant on
+    // public.orgs at all, so this is rejected regardless of which org id is
+    // targeted or whether userB is a member of it.
+    await expect(
+      asUser(userB, (sql) => sql.query("delete from public.orgs where id = $1", [orgA])),
+    ).rejects.toThrow(/permission denied for table orgs/);
   });
 
   it("refuses to update another org", async () => {
-    await asUser(userB, async (sql) => {
-      const result = await sql.query("update public.orgs set name = 'Hijacked' where id = $1", [
-        orgA,
-      ]);
-      expect(result.rowCount).toBe(0);
-    });
+    // Same story as the delete above: no UPDATE grant exists for
+    // authenticated on public.orgs, so the write is blocked at the ACL
+    // check before RLS row-scoping would even come into play.
+    await expect(
+      asUser(userB, (sql) =>
+        sql.query("update public.orgs set name = 'Hijacked' where id = $1", [orgA]),
+      ),
+    ).rejects.toThrow(/permission denied for table orgs/);
   });
 });

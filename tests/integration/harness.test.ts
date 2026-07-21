@@ -57,13 +57,20 @@ describe("test harness", () => {
     expect(role).toBe("authenticated");
   });
 
-  it("rejects inserts into public.orgs as authenticated (no insert policy)", async () => {
+  it("rejects inserts into public.orgs as authenticated (no insert grant)", async () => {
     const userId = await createTestUser(`insert-rls-${Date.now()}@example.test`);
 
+    // authenticated holds no INSERT privilege on public.orgs at all (see
+    // supabase/migrations/20260721000500_explicit_table_grants.sql), so the
+    // grant check rejects this before RLS is ever consulted. That is a
+    // stronger guarantee than an RLS denial: there is no policy that could
+    // ever be misconfigured to let this through, because the table-level
+    // ACL has no INSERT entry to give it. Writes go exclusively through the
+    // SECURITY DEFINER functions.
     await expect(
       asUser(userId, async (sql) => {
         await sql.query("insert into public.orgs (name) values ('should be rejected')");
       }),
-    ).rejects.toThrow(/row-level security/i);
+    ).rejects.toThrow(/permission denied for table orgs/i);
   });
 });
