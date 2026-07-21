@@ -34,16 +34,27 @@ export async function asUser<T>(userId: string, fn: (sql: PoolClient) => Promise
     await client.query("set local role authenticated");
     return await fn(client);
   } finally {
-    await client.query("rollback");
-    client.release();
+    try {
+      await client.query("rollback");
+    } finally {
+      client.release();
+    }
   }
 }
 
-/** Runs fn as superuser, bypassing RLS. Commits. */
+/** Runs fn as superuser, bypassing RLS. Commits, or rolls back and rethrows on error. */
 export async function asAdmin<T>(fn: (sql: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
   try {
-    return await fn(client);
+    await client.query("begin");
+    try {
+      const result = await fn(client);
+      await client.query("commit");
+      return result;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    }
   } finally {
     client.release();
   }
