@@ -72,4 +72,13 @@ describe("RLS isolation", () => {
       expect(result.rowCount).toBe(0);
     });
   });
+
+  it("refuses to update another org", async () => {
+    await asUser(userB, async (sql) => {
+      const result = await sql.query("update public.orgs set name = 'Hijacked' where id = $1", [
+        orgA,
+      ]);
+      expect(result.rowCount).toBe(0);
+    });
+  });
 });
