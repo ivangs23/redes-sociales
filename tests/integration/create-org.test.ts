@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { asAnon, asUser, createTestUser } from "./db";
+import { afterAll, describe, expect, it } from "vitest";
+import { asAnon, asUser, cleanupTestUsers, createTestUser } from "./db";
+
+afterAll(cleanupTestUsers);
 
 describe("create_org_for_current_user", () => {
   it("creates the org and makes the caller its owner", async () => {
@@ -65,5 +67,38 @@ describe("create_org_for_current_user", () => {
         sql.query("select public.is_org_member($1)", ["00000000-0000-0000-0000-000000000000"]),
       ),
     ).rejects.toThrow(/permission denied for function is_org_member/);
+  });
+});
+
+describe("ensure_org_for_current_user", () => {
+  it("is idempotent: calling it twice returns the same org and one membership", async () => {
+    const userId = await createTestUser(`ensure-${Date.now()}@example.test`);
+
+    // `asUser` rolls back at the end of the callback, so both calls have to
+    // happen inside the same callback to observe them against each other.
+    const result = await asUser(userId, async (sql) => {
+      const first = await sql.query<{ id: string }>(
+        "select public.ensure_org_for_current_user($1) as id",
+        ["Estudio Iván"],
+      );
+      const second = await sql.query<{ id: string }>(
+        "select public.ensure_org_for_current_user($1) as id",
+        ["Otro nombre"],
+      );
+
+      const firstId = first.rows[0]?.id;
+      const secondId = second.rows[0]?.id;
+      if (!firstId || !secondId) throw new Error("rpc returned no id");
+
+      const memberships = await sql.query<{ role: string }>(
+        "select role from public.memberships where org_id = $1 and user_id = $2",
+        [firstId, userId],
+      );
+
+      return { firstId, secondId, membershipCount: memberships.rowCount };
+    });
+
+    expect(result.secondId).toBe(result.firstId);
+    expect(result.membershipCount).toBe(1);
   });
 });
