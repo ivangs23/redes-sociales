@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { parseCredentials } from "./credentials";
+import { ensureOrgForUser } from "./ensure-org";
 
 export async function signUpAction(formData: FormData): Promise<{ error: string }> {
   const parsed = parseCredentials(formData);
@@ -10,13 +11,12 @@ export async function signUpAction(formData: FormData): Promise<{ error: string 
 
   const supabase = await createServerSupabase();
   const { error } = await supabase.auth.signUp(parsed);
-  if (error) return { error: error.message };
+  // Deliberately non-committal: under autoconfirm, a distinct message here
+  // would reveal whether the email is already registered.
+  if (error) return { error: "No se pudo crear la cuenta. Inténtalo de nuevo." };
 
-  const orgName = parsed.email.split("@")[0] ?? "Mi organización";
-  const { error: rpcError } = await supabase.rpc("create_org_for_current_user", {
-    org_name: orgName,
-  });
-  if (rpcError) return { error: rpcError.message };
+  const orgError = await ensureOrgForUser(supabase, parsed.email);
+  if (orgError) return orgError;
 
   redirect("/dashboard");
 }
@@ -28,6 +28,9 @@ export async function signInAction(formData: FormData): Promise<{ error: string 
   const supabase = await createServerSupabase();
   const { error } = await supabase.auth.signInWithPassword(parsed);
   if (error) return { error: "Correo o contraseña incorrectos." };
+
+  const orgError = await ensureOrgForUser(supabase, parsed.email);
+  if (orgError) return orgError;
 
   redirect("/dashboard");
 }

@@ -34,9 +34,28 @@ describe("parseCredentials", () => {
     });
   });
 
+  it("rejects a 7-character password", () => {
+    expect(parseCredentials(form({ email: "a@b.com", password: "1234567" }))).toEqual({
+      error: "La contraseña debe tener al menos 8 caracteres.",
+    });
+  });
+
+  it("accepts an 8-character password", () => {
+    expect(parseCredentials(form({ email: "a@b.com", password: "12345678" }))).toEqual({
+      email: "a@b.com",
+      password: "12345678",
+    });
+  });
+
   it("rejects missing fields", () => {
     expect(parseCredentials(form({}))).toEqual({
       error: "Introduce un correo electrónico válido.",
+    });
+  });
+
+  it("rejects a valid email with a missing password field", () => {
+    expect(parseCredentials(form({ email: "a@b.com" }))).toEqual({
+      error: "La contraseña debe tener al menos 8 caracteres.",
     });
   });
 });
