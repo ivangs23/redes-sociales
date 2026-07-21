@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { Pool, type PoolClient } from "pg";
+import { Client, Pool, type PoolClient } from "pg";
 import { getRequiredEnv } from "@/lib/env";
 
 const pool = new Pool({ connectionString: getRequiredEnv("SUPABASE_DB_URL") });
@@ -38,6 +38,40 @@ export async function asUser<T>(userId: string, fn: (sql: PoolClient) => Promise
       await client.query("rollback");
     } finally {
       client.release();
+    }
+  }
+}
+
+/**
+ * Runs fn as the anon role, connecting through the `authenticator` role the
+ * way PostgREST does for real anon requests.
+ *
+ * This intentionally does NOT reuse the shared `pool` behind `asUser`. That
+ * pool connects as `postgres`, and on this local dev Postgres image, running
+ * `set local role anon` on a `postgres` session and then hitting a
+ * function-EXECUTE permission denial for that role crashes the backend with
+ * SIGSEGV — reproduced independently of any of this project's own functions,
+ * so it is a defect in the local dev image/extensions, not in the schema.
+ * The identical check performed through `authenticator` (the role PostgREST
+ * actually connects as) behaves correctly and returns a normal permission-
+ * denied error, matching what a real anon HTTP request receives. Always
+ * rolls back.
+ */
+export async function asAnon<T>(fn: (sql: Client) => Promise<T>): Promise<T> {
+  const url = new URL(getRequiredEnv("SUPABASE_DB_URL"));
+  url.username = "authenticator";
+  url.password = "postgres";
+  const client = new Client({ connectionString: url.toString() });
+  await client.connect();
+  try {
+    await client.query("begin");
+    await client.query("set local role anon");
+    return await fn(client);
+  } finally {
+    try {
+      await client.query("rollback");
+    } finally {
+      await client.end();
     }
   }
 }

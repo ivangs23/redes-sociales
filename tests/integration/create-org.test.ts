@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { asUser, createTestUser } from "./db";
+import { asAnon, asUser, createTestUser } from "./db";
 
 describe("create_org_for_current_user", () => {
   it("creates the org and makes the caller its owner", async () => {
@@ -43,5 +43,27 @@ describe("create_org_for_current_user", () => {
         return sql.query("select public.create_org_for_current_user($1)", ["Ghost"]);
       }),
     ).rejects.toThrow(/not authenticated/);
+  });
+
+  it("denies anon at the grant level, not just the internal auth check", async () => {
+    // If anon still held EXECUTE, this would fail inside the function with
+    // "not authenticated" (auth.uid() is null for anon). Revoking EXECUTE
+    // from anon must reject the call before the function body ever runs,
+    // so the error has to be Postgres' own permission-denied error instead.
+    await expect(
+      asAnon((sql) => sql.query("select public.create_org_for_current_user($1)", ["x"])),
+    ).rejects.toThrow(/permission denied for function create_org_for_current_user/);
+  });
+
+  it("denies anon EXECUTE on is_org_member at the grant level", async () => {
+    // is_org_member's defining migration never stripped its default PUBLIC
+    // grant, so a revoke targeted only at anon would have been a no-op:
+    // anon would still inherit EXECUTE through PUBLIC. This must fail with
+    // Postgres' own permission-denied error, not run the function body.
+    await expect(
+      asAnon((sql) =>
+        sql.query("select public.is_org_member($1)", ["00000000-0000-0000-0000-000000000000"]),
+      ),
+    ).rejects.toThrow(/permission denied for function is_org_member/);
   });
 });
