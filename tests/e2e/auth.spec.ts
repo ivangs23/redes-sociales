@@ -23,6 +23,8 @@ test("a malformed email shows an error and stays on login", async ({ page }) => 
   await page.getByLabel("Contraseña").fill("test-password-1234");
   await page.getByRole("button", { name: "Crear cuenta" }).click();
 
-  await expect(page.getByRole("alert")).toHaveText("Introduce un correo electrónico válido.");
+  await expect(page.getByTestId("form-error")).toHaveText(
+    "Introduce un correo electrónico válido.",
+  );
   await expect(page).toHaveURL(/\/login$/);
 });

@@ -45,7 +45,7 @@ export default function LoginPage() {
         </button>
       </form>
       {error ? (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" data-testid="form-error" className="text-sm text-red-600">
           {error}
         </p>
       ) : null}
