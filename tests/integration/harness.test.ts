@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { asAdmin, asUser, createTestUser } from "./db";
+import { afterAll, describe, expect, it } from "vitest";
+import { asAdmin, asUser, cleanupTestUsers, createTestUser } from "./db";
+
+afterAll(cleanupTestUsers);
 
 describe("test harness", () => {
   it("creates a user and exposes its id through auth.uid()", async () => {

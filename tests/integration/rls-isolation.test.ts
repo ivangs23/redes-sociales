@@ -1,5 +1,5 @@
-import { beforeAll, describe, expect, it } from "vitest";
-import { asAdmin, asUser, createTestUser } from "./db";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { asAdmin, asUser, cleanupTestUsers, createTestUser } from "./db";
 
 let userA: string;
 let userB: string;
@@ -22,6 +22,15 @@ beforeAll(async () => {
     );
     return id;
   });
+});
+
+afterAll(async () => {
+  // Deleting userA/userB cascades to their memberships, but `orgA` was
+  // seeded directly via asAdmin (committed, not rolled back) and is not
+  // referenced by auth.users, so it survives a user delete and must be
+  // removed explicitly.
+  await asAdmin((sql) => sql.query("delete from public.orgs where id = $1", [orgA]));
+  await cleanupTestUsers();
 });
 
 describe("RLS isolation", () => {

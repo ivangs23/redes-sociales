@@ -12,6 +12,8 @@ const admin = createClient(
   },
 );
 
+const createdUserIds = new Set<string>();
+
 export async function createTestUser(email: string): Promise<string> {
   const { data, error } = await admin.auth.admin.createUser({
     email,
@@ -19,7 +21,30 @@ export async function createTestUser(email: string): Promise<string> {
     email_confirm: true,
   });
   if (error) throw new Error(`createTestUser failed: ${error.message}`);
+  createdUserIds.add(data.user.id);
   return data.user.id;
+}
+
+/**
+ * Deletes every user handed out by `createTestUser` in this process, via
+ * the admin API — the same API that created them, outside any SQL
+ * transaction and therefore not covered by `asUser`'s rollback.
+ *
+ * Deleting a user cascades to their `memberships` rows (the FK is `on
+ * delete cascade`), but does NOT remove any `orgs` row a test seeded
+ * directly (e.g. through `asAdmin`): a test that does that must delete
+ * that org itself in its own `afterAll`.
+ *
+ * Call this from an `afterAll` in every integration test file that calls
+ * `createTestUser`.
+ */
+export async function cleanupTestUsers(): Promise<void> {
+  const ids = [...createdUserIds];
+  createdUserIds.clear();
+  for (const id of ids) {
+    const { error } = await admin.auth.admin.deleteUser(id);
+    if (error) throw new Error(`cleanupTestUsers failed for ${id}: ${error.message}`);
+  }
 }
 
 /** Runs fn as the given authenticated user. Always rolls back. */
@@ -59,8 +84,11 @@ export async function asUser<T>(userId: string, fn: (sql: PoolClient) => Promise
  */
 export async function asAnon<T>(fn: (sql: Client) => Promise<T>): Promise<T> {
   const url = new URL(getRequiredEnv("SUPABASE_DB_URL"));
+  // Reuse the password already present in SUPABASE_DB_URL rather than
+  // hardcoding one, so this keeps working if the connection string changes.
+  // Only the username changes: `authenticator` is the role PostgREST itself
+  // connects as before switching to `anon` for the request.
   url.username = "authenticator";
-  url.password = "postgres";
   const client = new Client({ connectionString: url.toString() });
   await client.connect();
   try {
