@@ -19,7 +19,18 @@
 - Ninguna tabla de negocio tiene políticas `INSERT`, `UPDATE` ni `DELETE` para el rol `authenticated`. Las escrituras pasan por funciones `SECURITY DEFINER` con `set search_path = public`.
 - Instantes siempre en UTC (`timestamptz`).
 - Los mensajes de commit se escriben en inglés, siguiendo Conventional Commits. La documentación va en español.
-- Puerto de Postgres local de Supabase: `54322`. URL: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`.
+- **Puertos de Supabase local.** Los puertos por defecto (`5432x`) los ocupa otro proyecto de la máquina, `suarex-platform`. Este proyecto usa el rango `5442x`, fijado en `supabase/config.toml`, para que ambas pilas convivan:
+
+  | Sección | Clave | Valor |
+  |---|---|---|
+  | `[api]` | `port` | `54421` |
+  | `[db]` | `port` | `54422` |
+  | `[db]` | `shadow_port` | `54420` |
+  | `[studio]` | `port` | `54423` |
+  | `[inbucket]` | `port` | `54424` |
+  | `[analytics]` | `port` | `54427` |
+
+  URL de Postgres: `postgresql://postgres:postgres@127.0.0.1:54422/postgres`. URL de la API: `http://127.0.0.1:54421`.
 
 **Fuera de alcance de esta fase, deliberadamente:** cualquier código que hable con Meta, la tabla `posts`, la cola de publicación, el composer y el calendario. Todo eso es la Fase 1a y tendrá su propio plan.
 
@@ -315,7 +326,7 @@ Expected: termina con `Finished supabase db reset.` sin errores de SQL.
 - [ ] **Step 4: Verificar que RLS está activa en ambas tablas**
 
 ```bash
-psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -c \
+psql "postgresql://postgres:postgres@127.0.0.1:54422/postgres" -c \
 "select tablename, rowsecurity from pg_tables where schemaname='public' order by tablename;"
 ```
 
@@ -367,8 +378,8 @@ pnpm add @supabase/supabase-js
 Obtén las claves con `supabase status`. Crea `.env.test`:
 
 ```
-SUPABASE_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
-SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_DB_URL=postgresql://postgres:postgres@127.0.0.1:54422/postgres
+SUPABASE_URL=http://127.0.0.1:54421
 SUPABASE_SERVICE_ROLE_KEY=<pega aquí la service_role key de `supabase status`>
 ```
 
@@ -797,7 +808,7 @@ pnpm add @supabase/ssr
 Crea `.env.local` con los valores de `supabase status`:
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54421
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key de `supabase status`>
 ```
 
@@ -1239,7 +1250,7 @@ jobs:
 
       - name: Export Supabase credentials
         run: |
-          echo "SUPABASE_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres" >> .env.test
+          echo "SUPABASE_DB_URL=postgresql://postgres:postgres@127.0.0.1:54422/postgres" >> .env.test
           echo "SUPABASE_URL=$(supabase status -o env | grep '^API_URL=' | cut -d= -f2- | tr -d '\"')" >> .env.test
           echo "SUPABASE_SERVICE_ROLE_KEY=$(supabase status -o env | grep '^SERVICE_ROLE_KEY=' | cut -d= -f2- | tr -d '\"')" >> .env.test
           echo "NEXT_PUBLIC_SUPABASE_URL=$(supabase status -o env | grep '^API_URL=' | cut -d= -f2- | tr -d '\"')" >> .env.local
@@ -1302,7 +1313,7 @@ pnpm dev
 Crea también `.env.example`:
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54421
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 ```
 
