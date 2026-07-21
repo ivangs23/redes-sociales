@@ -24,7 +24,10 @@ jobs:
 
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned, not "latest": resolving "latest" hits the GitHub API and
+          # fails the whole run on rate limit. Matches the developer's local
+          # CLI, so CI and local apply migrations identically.
+          version: 2.98.1
 
       - run: supabase start
 
